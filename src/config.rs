@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 #[derive(Debug, Deserialize)]
 pub struct DefaultConfig {
     pub server_port_http: u16,
+    pub data_refresh_interval: u64,
     pub chain_base_rpc_url: String,
     pub chain_base_uniswap_v2_factory_address: String,
     pub chain_base_uniswap_v3_factory_address: String,
@@ -15,6 +16,7 @@ pub struct DefaultConfig {
 
 enum EnvVar {
     ServerPortHTTP,
+    DataRefreshInterval,
     ChainBaseRPCURL,
     ChainBaseUniswapV2FactoryAddress,
     ChainBaseUniswapV3FactoryAddress
@@ -42,6 +44,7 @@ impl EnvVar {
     fn as_str(&self) -> &str {
         match self {
             EnvVar::ServerPortHTTP => "SERVER_PORT_HTTP",
+            EnvVar::DataRefreshInterval => "DATA_REFRESH_INTERVAL",
             EnvVar::ChainBaseRPCURL => "CHAIN_BASE_RPC_URL",
             EnvVar::ChainBaseUniswapV2FactoryAddress => "CHAIN_BASE_UNISWAP_V2_FACTORY_ADDRESS",
             EnvVar::ChainBaseUniswapV3FactoryAddress => "CHAIN_BASE_UNISWAP_V3_FACTORY_ADDRESS"
@@ -82,15 +85,18 @@ pub fn load_config_from_env_or_file() -> Result<AppConfig, Box<dyn Error>> {
     config.default.server_port_http = EnvVar::ServerPortHTTP
         .get_value(&config.default.server_port_http); // u16 for server_port_http
 
+    config.default.data_refresh_interval = EnvVar::DataRefreshInterval
+        .get_value(&config.default.data_refresh_interval); // u16 refresh data interval in seconds
+
     // Override with environment variables if they exist
     config.default.chain_base_rpc_url = EnvVar::ChainBaseRPCURL
-        .get_value(&config.default.chain_base_rpc_url); // u16 for server_port_grpc
+        .get_value(&config.default.chain_base_rpc_url); // String for chain RPC URL
 
     config.default.chain_base_uniswap_v2_factory_address = EnvVar::ChainBaseUniswapV2FactoryAddress
-        .get_value(&config.default.chain_base_uniswap_v2_factory_address); // String for trading_pair
+        .get_value(&config.default.chain_base_uniswap_v2_factory_address); // String for Factory Address
 
     config.default.chain_base_uniswap_v3_factory_address = EnvVar::ChainBaseUniswapV3FactoryAddress
-        .get_value(&config.default.chain_base_uniswap_v3_factory_address); // u16 for book_depth
+        .get_value(&config.default.chain_base_uniswap_v3_factory_address); // String for Factory V3 address
 
     log::info!("Config loaded: {:?}",config);
 
