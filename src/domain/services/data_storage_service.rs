@@ -52,6 +52,7 @@ pub trait DataStorageTrait {
     fn get_token_pairs_size(&self) -> i64;
 
     fn add_update_log(&self, key: String, update_log: UpdateLog);
+    fn get_update_log(&self, key: String) -> Option<UpdateLog>;
     fn get_update_logs(&self) -> HashMap<String, UpdateLog>;
     fn get_update_logs_size(&self) -> i64;
 }
@@ -140,6 +141,11 @@ impl DataStorageTrait for DataStorageService {
     fn add_update_log(&self, key: String, update_log: UpdateLog) {
         let mut storage = DATA_STORAGE.lock().unwrap();
         storage.update_logs.insert(key, update_log);
+    }
+
+    fn get_update_log(&self, key: String) -> Option<UpdateLog> {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage.update_logs.get(&key).cloned()
     }
 
     fn get_update_logs(&self) -> HashMap<String, UpdateLog> {
