@@ -11,7 +11,7 @@ pub fn create_token_rest_api() -> impl Filter<Extract = impl warp::Reply, Error 
 
             let tokens = data_service.get_tokens();
 
-            if let Some(tokens) = tokens {
+            if !tokens.is_empty() {
                 let reply = warp::reply::json(&tokens);
                 Ok::<_, warp::Rejection>(warp::reply::with_status(reply, warp::http::StatusCode::OK))
             } else {

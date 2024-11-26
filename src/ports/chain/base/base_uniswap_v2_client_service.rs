@@ -106,7 +106,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
         for token_address in token_addresses{
             match Self::fetch_token_details(token_address, provider.clone()).await {
                 Ok(token) => {
-                    data_service.add_token(token);
+                    data_service.add_token(token.address.clone(),token);
                 }
                 Err(e) => log::error!("Fetch error for token {}: {:?}", token_address, e),
             }
