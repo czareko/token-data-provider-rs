@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use ethers::contract::abigen;
 use ethers::providers::{Http, Middleware, Provider};
 use async_trait::async_trait;
-use ethers::types::{Address, Filter, Log, U256};
+use ethers::types::{Address, Filter, Log, H256, U256};
 use crate::config::CONFIG;
 use log;
 use tokio::time::{sleep, Duration};
@@ -93,6 +93,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
             if data_service.get_tokens_size() == 0{
                 let _ = Self::init_token_list(&self,data_service.clone(),provider.clone(),
                                               update_log.start_block,update_log.end_block).await;
+
             }
             else{
                 log::info!("Token list size: {}", data_service.get_tokens_size())
@@ -113,8 +114,8 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
         log::info!("Full pair list size: {}", pair_count);
 
         let mut token_addresses = vec![];
-
-        for i in 0..pair_count.as_u64() {
+        for i in 0..25 {
+        //for i in 0..pair_count.as_u64() {
             let pair_address: Address = factory.all_pairs(U256::from(i)).call().await?;
             let pair = UniswapV2Pair::new(pair_address, provider.clone());
 
@@ -127,7 +128,9 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
 
             log::info!("Pair {}: Token0: {}, Token1: {}", i, token0, token1);
             log::info!("Address: {} RESERVE: {}:{}:{}",pair_address,reserve.0,reserve.1,reserve.2);
-            data_service.add_token_pair(pair_address.to_string(),TokenPair {
+            //let swaps = Self::count_swap_events(pair_address, provider.clone(),from_block,to_block).await?;
+            //log::info!("SWAPS: {}",swaps);
+            let token_pair = TokenPair {
                 token_pair_address: pair_address.to_string(),
                 protocol_id: PROTOCOL_ID.to_string(),
                 base_address: token0.to_string(),
@@ -138,7 +141,9 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
                 swaps: 0,
                 retrieved_at: SystemTime::now(),
                 updated_at: SystemTime::now()
-            });
+            };
+            //log::info!("Pair {}",token_pair);
+            data_service.add_token_pair(pair_address.to_string(),token_pair);
         }
 
         token_addresses.sort();
@@ -168,9 +173,9 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
 
         log::info!("Token: {} ({}) | Address: {} | Decimals: {}", name, symbol, address, decimals);
 
-        let events = Self::count_transfer_events(address.clone(),provider.clone(),from_block,to_block).await.unwrap();
+        //let events = Self::count_transfer_events(address.clone(),provider.clone(),from_block,to_block).await.unwrap();
 
-        log::info!("Transfers {}",events);
+        //log::info!("Transfers {}",events);
 
         let token_object = Token {
             address: format!("{:?}", address),
@@ -195,7 +200,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
         let transfer_event_signature = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
         let filter = Filter::new()
-            .address(token_address)
+            //.address(token_address)
             .topic0(transfer_event_signature.parse::<ethers::types::H256>()?)
             .from_block(from_block)
             .to_block(to_block);
@@ -212,10 +217,12 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
             ..Default::default()
         };
 
+        let current_block = provider.get_block_number().await?.as_u64();
+
         if let Some(existing_log) = data_service.get_update_log(PROTOCOL_ID.to_string()) {
             let mut updated_log = existing_log.clone();
             updated_log.last_update_at = SystemTime::now();
-            updated_log.end_block = provider.get_block_number().await?.as_u64();
+            updated_log.end_block = current_block;
             data_service.add_update_log(PROTOCOL_ID.to_string(),updated_log.clone());
 
             Ok(updated_log.clone())
@@ -224,7 +231,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
             update_log.created_at = SystemTime::now();
             update_log.last_update_at = SystemTime::now();
             update_log.start_block = 0;
-            update_log.end_block = update_log.start_block;
+            update_log.end_block = current_block;
 
             data_service.add_update_log(PROTOCOL_ID.to_string(), update_log.clone());
 
