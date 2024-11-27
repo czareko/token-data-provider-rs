@@ -28,6 +28,7 @@ pub trait BaseUniswapV2SwapSynchronizerTrait: Send + Sync{
     ) -> Result<u64, Box<dyn Error>>;
     async fn get_processing_status(&self) -> bool;
     async fn get_last_processed_block(&self) -> u64;
+    async fn is_block_processed_or_newer(&self, block: u64) -> bool;
 }
 
 #[async_trait]
@@ -37,8 +38,8 @@ impl BaseUniswapV2SwapSynchronizerTrait for BaseUniswapV2SwapSynchronizer{
         let rpc_url = CONFIG.default.chain_base_rpc_url.clone();
         let data_service = Arc::new(DataStorageService);
         let provider = Arc::new(Provider::<Http>::try_from(rpc_url)?);
-        let step = 500;
-        let mut from_block = 22500000;
+        let step = 1000;
+        let mut from_block = 22800000;
 
         loop{
             log::info!("Swap event refresh ....  from block: {}",from_block);
@@ -112,7 +113,8 @@ impl BaseUniswapV2SwapSynchronizerTrait for BaseUniswapV2SwapSynchronizer{
                         }
                         let mut last_block = LAST_PROCESSED_BLOCK.lock().await;
                         *last_block = block_end as u64;
-                        log::info!("Swap sync: processed blocks: {}", block_end);
+                        log::info!("Swap sync: processed blocks: {} from {} : data set size: {} ",
+                            block_end, to_block, data_service.get_all_swap_logs().len() );
                         break;
                     }
                     Err(e) if attempts < max_attempts => {
@@ -151,5 +153,10 @@ impl BaseUniswapV2SwapSynchronizerTrait for BaseUniswapV2SwapSynchronizer{
     async fn get_last_processed_block(&self) -> u64 {
         let last_block = LAST_PROCESSED_BLOCK.lock().await;
         *last_block
+    }
+
+    async fn is_block_processed_or_newer(&self, block: u64) -> bool {
+        let last_block = LAST_PROCESSED_BLOCK.lock().await;
+        *last_block >= block
     }
 }

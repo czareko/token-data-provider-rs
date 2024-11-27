@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::SystemTime;
 use ethers::contract::abigen;
 use ethers::providers::{Http, Middleware, Provider};
 use async_trait::async_trait;
-use ethers::types::{Address, Filter, Log, H256, U256};
+use ethers::types::{Address, Filter, Log, U256};
 use crate::config::CONFIG;
 use log;
 use tokio::time::{sleep, Duration};
@@ -12,6 +13,7 @@ use crate::domain::entities::token::Token;
 use crate::domain::entities::token_pair::TokenPair;
 use crate::domain::entities::update_log::UpdateLog;
 use crate::domain::services::data_storage_service::{DataStorageService, DataStorageTrait};
+use crate::ports::chain::base::base_uniswap_v2_swap_sync::{BaseUniswapV2SwapSynchronizer, BaseUniswapV2SwapSynchronizerTrait};
 
 abigen!(
     UniswapV2Factory,
@@ -60,16 +62,17 @@ pub struct BaseUniswapV2ClientService;
 pub trait BaseUniswapV2ClientServiceTrait: Send + Sync{
     async fn init_chain_data_sync(&self) -> Result<(), Box<dyn std::error::Error>>;
     async fn init_token_list(&self, data_service: Arc<DataStorageService>,
+                             swap_sync: Arc<BaseUniswapV2SwapSynchronizer>,
                              provider: Arc<Provider<Http>>, from_block: u64, to_block: u64)
         -> Result<(), Box<dyn std::error::Error>>;
     async fn fetch_token_details(
-        address: Address,provider: Arc<Provider<Http>>, from_block: u64, to_block: u64)
+        address: Address, data_service: Arc<DataStorageService>, provider: Arc<Provider<Http>>, from_block: u64, to_block: u64)
         -> Result<Token, Box<dyn std::error::Error>>;
-    async fn count_transfer_events(
-        token_address: Address, provider: Arc<Provider<Http>>, from_block: u64, to_block: u64)
-        -> Result<usize, Box<dyn std::error::Error>>;
+    // async fn count_transfer_events(
+    //     token_address: Address, provider: Arc<Provider<Http>>, from_block: u64, to_block: u64)
+    //     -> Result<usize, Box<dyn std::error::Error>>;
     async fn update_sync_log(&self, data_service: Arc<DataStorageService>, provider: Arc<Provider<Http>>)
-        -> Result<UpdateLog, Box<dyn std::error::Error>>;
+         -> Result<UpdateLog, Box<dyn std::error::Error>>;
 }
 
 #[async_trait]
@@ -77,6 +80,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
     async fn init_chain_data_sync(&self) -> Result<(), Box<dyn std::error::Error>> {
 
         let data_service = Arc::new(DataStorageService);
+        let swap_sync = Arc::new(BaseUniswapV2SwapSynchronizer);
 
         let rpc_url = CONFIG.default.chain_base_rpc_url.clone();
         let provider = Arc::new(Provider::<Http>::try_from(rpc_url)?);
@@ -91,20 +95,19 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
             log::info!("Base Network UniswapV2 - data refresh");
 
             if data_service.get_tokens_size() == 0{
-                let _ = Self::init_token_list(&self,data_service.clone(),provider.clone(),
+                let _ = Self::init_token_list(&self,data_service.clone(),swap_sync.clone(), provider.clone(),
                                               update_log.start_block,update_log.end_block).await;
-
             }
             else{
                 log::info!("Token list size: {}", data_service.get_tokens_size())
             }
-            let update_log = self.update_sync_log(data_service.clone(),provider.clone()).await.unwrap();
-            log::info!("UpdateLog: {}",update_log);
+            //let update_log = self.update_sync_log(data_service.clone(),provider.clone()).await.unwrap();
+            //log::info!("UpdateLog: {}",update_log);
             sleep(Duration::from_secs(CONFIG.default.data_refresh_interval.clone())).await;
         }
     }
 
-    async fn init_token_list(&self, data_service: Arc<DataStorageService>, provider: Arc<Provider<Http>>, from_block: u64, to_block: u64) -> Result<(), Box<dyn std::error::Error>>{
+    async fn init_token_list(&self, data_service: Arc<DataStorageService>, swap_sync: Arc<BaseUniswapV2SwapSynchronizer>, provider: Arc<Provider<Http>>, from_block: u64, to_block: u64) -> Result<(), Box<dyn std::error::Error>>{
         log::info!("Initial full token load");
         let factory_address: Address = CONFIG.default.chain_base_uniswap_v2_factory_address.clone().parse()?;
 
@@ -114,8 +117,8 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
         log::info!("Full pair list size: {}", pair_count);
 
         let mut token_addresses = vec![];
-        for i in 0..25 {
-        //for i in 0..pair_count.as_u64() {
+        //for i in 0..100 {
+        for i in 0..pair_count.as_u64() {
             let pair_address: Address = factory.all_pairs(U256::from(i)).call().await?;
             let pair = UniswapV2Pair::new(pair_address, provider.clone());
 
@@ -127,7 +130,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
             token_addresses.push(token1);
 
             log::info!("Pair {}: Token0: {}, Token1: {}", i, token0, token1);
-            log::info!("Address: {} RESERVE: {}:{}:{}",pair_address,reserve.0,reserve.1,reserve.2);
+            //log::info!("Address: {} RESERVE: {}:{}:{}",pair_address,reserve.0,reserve.1,reserve.2);
             //let swaps = Self::count_swap_events(pair_address, provider.clone(),from_block,to_block).await?;
             //log::info!("SWAPS: {}",swaps);
             let token_pair = TokenPair {
@@ -149,10 +152,32 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
         token_addresses.sort();
         token_addresses.dedup();
 
+        //For each pair check swap events
+        //but first wait for swap events upload.
+        loop{
+            if swap_sync.get_processing_status().await {
+                log::info!("Swap events not ready");
+                sleep(Duration::from_secs(15)).await
+            }
+            else{
+                break;
+            }
+        }
+
+        for token_pair in data_service.get_token_pairs(){
+            let swaps = data_service.get_total_swaps_for_address(token_pair.clone().1.token_pair_address);
+            let mut updated_token_pair = token_pair.clone().1;
+            updated_token_pair.swaps = swaps;
+            data_service.add_token_pair(updated_token_pair.token_pair_address.clone(), updated_token_pair);
+        }
+
+        log::info!("Swaps events in token pairs");
+
+
         log::info!("\nUnique tokens on BASE Network:");
 
         for token_address in token_addresses{
-            match Self::fetch_token_details(token_address, provider.clone(),
+            match Self::fetch_token_details(token_address, data_service.clone(), provider.clone(),
                                             from_block,to_block).await {
                 Ok(token) => {
                     data_service.add_token(token.address.clone(),token);
@@ -163,7 +188,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
         Ok(())
     }
 
-    async fn fetch_token_details(address: Address, provider: Arc<Provider<Http>>,
+    async fn fetch_token_details(address: Address, data_service: Arc<DataStorageService>, provider: Arc<Provider<Http>>,
         from_block: u64, to_block: u64) -> Result<Token, Box<dyn std::error::Error>> {
         let token = ERC20::new(address, provider.clone());
 
@@ -176,6 +201,19 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
         //let events = Self::count_transfer_events(address.clone(),provider.clone(),from_block,to_block).await.unwrap();
 
         //log::info!("Transfers {}",events);
+        let pairs =data_service.get_token_pairs_by_address(address.to_string());
+        let active_pairs = data_service.get_non_zero_reserve_token_pairs_by_address(address.to_string());
+        let swaps = data_service.get_total_swaps_for_address(address.to_string());
+
+        if swaps > 0 {
+            log::info!("Existing swaps for token {} ",symbol);
+        }
+
+        let mut high_risk = false;
+        if active_pairs.is_empty() || (active_pairs.len() < (pairs.len() / 2)) {
+            high_risk = true;
+        }
+
 
         let token_object = Token {
             address: format!("{:?}", address),
@@ -185,11 +223,16 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
             decimals: decimals.to_string(),
             retrieved_at: SystemTime::now(),
             updated_at: SystemTime::now(),
-            active: true,
+            pairs,
+            active_pairs,
+            swaps,
+            high_risk,
         };
 
         Ok(token_object)
     }
+
+    /*
 
     async fn count_transfer_events(
         token_address: Address,
@@ -209,6 +252,7 @@ impl BaseUniswapV2ClientServiceTrait for BaseUniswapV2ClientService {
 
         Ok(logs.len())
     }
+    */
 
     async fn update_sync_log(&self, data_service: Arc<DataStorageService>, provider: Arc<Provider<Http>>) -> Result<UpdateLog, Box<dyn Error>> {
 

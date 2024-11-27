@@ -53,6 +53,9 @@ pub trait DataStorageTrait {
     fn get_token_pair(&self, key: String)-> Option<TokenPair>;
     fn get_token_pairs(&self) -> HashMap<String, TokenPair>;
     fn get_token_pairs_size(&self) -> i64;
+    fn get_token_pairs_by_address(&self, address: String) -> HashMap<String, TokenPair>;
+    fn get_non_zero_reserve_token_pairs_by_address(&self, address: String) -> HashMap<String, TokenPair>;
+    fn get_total_swaps_for_address(&self, address: String) -> i64;
 
     fn add_update_log(&self, key: String, update_log: UpdateLog);
     fn get_update_log(&self, key: String) -> Option<UpdateLog>;
@@ -145,6 +148,41 @@ impl DataStorageTrait for DataStorageService {
         let storage = DATA_STORAGE.lock().unwrap();
         storage.token_pairs.len() as i64
     }
+
+    fn get_token_pairs_by_address(&self, address: String) -> HashMap<String, TokenPair> {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage
+            .token_pairs
+            .iter()
+            .filter(|(_, pair)| pair.base_address == address || pair.quote_address == address)
+            .map(|(key, pair)| (key.clone(), pair.clone()))
+            .collect()
+    }
+
+    fn get_non_zero_reserve_token_pairs_by_address(&self, address: String) -> HashMap<String, TokenPair> {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage
+            .token_pairs
+            .iter()
+            .filter(|(_, pair)| {
+                (pair.base_address == address || pair.quote_address == address)
+                    && pair.base_reserve > 0
+                    && pair.quote_reserve > 0
+            })
+            .map(|(key, pair)| (key.clone(), pair.clone()))
+            .collect()
+    }
+
+    fn get_total_swaps_for_address(&self, address: String) -> i64 {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage
+            .token_pairs
+            .values()
+            .filter(|pair| pair.base_address == address || pair.quote_address == address)
+            .map(|pair| pair.swaps)
+            .sum()
+    }
+
 
     // UPDATE LOGS
     fn add_update_log(&self, key: String, update_log: UpdateLog) {

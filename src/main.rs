@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let base_uniswap_v2_swap_sync_handle = tokio::spawn(async{
         let base_uniswap_v2_swap_sync = Arc::new(BaseUniswapV2SwapSynchronizer);
-        base_uniswap_v2_swap_sync.synchronize_swaps().await;
+        let _ = base_uniswap_v2_swap_sync.synchronize_swaps().await;
     });
 
     let base_uniswap_v2_handle = tokio::spawn(async {
