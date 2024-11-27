@@ -6,6 +6,7 @@ use crate::domain::entities::token::Token;
 use crate::domain::entities::token_pair::TokenPair;
 use crate::domain::entities::update_log::UpdateLog;
 use log;
+use crate::domain::entities::swap_log::SwapLog;
 
 pub static DATA_STORAGE: Lazy<Arc<Mutex<DataStorage>>> = Lazy::new(|| {
     Arc::new(Mutex::new(DataStorage::default()))
@@ -16,6 +17,7 @@ pub struct DataStorage {
     pub protocols: HashMap<String, Protocol>,
     pub token_pairs: HashMap<String, TokenPair>,
     pub update_logs: HashMap<String, UpdateLog>,
+    pub swap_logs: HashMap<String, Vec<SwapLog>>,
 }
 
 impl Default for DataStorage {
@@ -25,6 +27,7 @@ impl Default for DataStorage {
             protocols: HashMap::new(),
             token_pairs: HashMap::new(),
             update_logs: HashMap::new(),
+            swap_logs: HashMap::new(),
         }
     }
 }
@@ -55,6 +58,12 @@ pub trait DataStorageTrait {
     fn get_update_log(&self, key: String) -> Option<UpdateLog>;
     fn get_update_logs(&self) -> HashMap<String, UpdateLog>;
     fn get_update_logs_size(&self) -> i64;
+
+    fn add_swap_log(&self, key: String, swap_log: SwapLog);
+    fn get_swap_logs(&self, key: String) -> Option<Vec<SwapLog>>;
+    fn get_all_swap_logs(&self) -> HashMap<String, Vec<SwapLog>>;
+    fn get_swap_logs_size(&self, key: String) -> i64;
+    fn get_total_swap_logs_size(&self) -> i64;
 }
 
 impl DataStorageTrait for DataStorageService {
@@ -156,5 +165,39 @@ impl DataStorageTrait for DataStorageService {
     fn get_update_logs_size(&self) -> i64 {
         let storage = DATA_STORAGE.lock().unwrap();
         storage.update_logs.len() as i64
+    }
+
+    //SWAP LOGS
+
+    fn add_swap_log(&self, key: String, swap_log: SwapLog) {
+        let mut storage = DATA_STORAGE.lock().unwrap();
+        storage
+            .swap_logs
+            .entry(key)
+            .or_insert_with(Vec::new)
+            .push(swap_log);
+    }
+
+    fn get_swap_logs(&self, key: String) -> Option<Vec<SwapLog>> {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage.swap_logs.get(&key).cloned()
+    }
+
+    fn get_all_swap_logs(&self) -> HashMap<String, Vec<SwapLog>> {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage.swap_logs.clone()
+    }
+
+    fn get_swap_logs_size(&self, key: String) -> i64 {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage
+            .swap_logs
+            .get(&key)
+            .map_or(0, |logs| logs.len() as i64)
+    }
+
+    fn get_total_swap_logs_size(&self) -> i64 {
+        let storage = DATA_STORAGE.lock().unwrap();
+        storage.swap_logs.values().map(|logs| logs.len() as i64).sum()
     }
 }

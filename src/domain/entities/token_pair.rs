@@ -1,3 +1,4 @@
+use std::fmt;
 use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 
@@ -29,5 +30,35 @@ impl Default for TokenPair {
             retrieved_at: SystemTime::now(),
             updated_at: SystemTime::now(),
         }
+    }
+}
+
+impl fmt::Display for TokenPair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "TokenPair {{
+            token_pair_address: {},
+            protocol_id: {},
+            base_address: {},
+            base_reserve: {},
+            quote_address: {},
+            quote_reserve: {},
+            reserve_block: {},
+            swaps: {},
+            retrieved_at: {:?},
+            updated_at: {:?}
+        }}",
+            self.token_pair_address,
+            self.protocol_id,
+            self.base_address,
+            self.base_reserve,
+            self.quote_address,
+            self.quote_reserve,
+            self.reserve_block,
+            self.swaps,
+            self.retrieved_at,
+            self.updated_at
+        )
     }
 }

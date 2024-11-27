@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::config::CONFIG;
 use crate::ports::chain::base::base_uniswap_v2_client_service::{BaseUniswapV2ClientService, BaseUniswapV2ClientServiceTrait};
 use crate::adapters::token_api::create_token_rest_api;
+use crate::ports::chain::base::base_uniswap_v2_swap_sync::{BaseUniswapV2SwapSynchronizer, BaseUniswapV2SwapSynchronizerTrait};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,6 +24,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     //log::info!("HTTP SERVER PORT::{}",CONFIG.default.server_port_http);
 
+    let base_uniswap_v2_swap_sync_handle = tokio::spawn(async{
+        let base_uniswap_v2_swap_sync = Arc::new(BaseUniswapV2SwapSynchronizer);
+        base_uniswap_v2_swap_sync.synchronize_swaps().await;
+    });
+
     let base_uniswap_v2_handle = tokio::spawn(async {
         log::info!("Starting Base Newtork Uniswap V2 Sync service ...");
         let base_uniswap_v2_client_service = Arc::new(BaseUniswapV2ClientService);
@@ -37,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Err(e) = tokio::try_join!(
         base_uniswap_v2_handle,
+        base_uniswap_v2_swap_sync_handle,
         rest_api_handle
     ) {
         log::error!("Error occurred while joining tasks: {:?}", e);
