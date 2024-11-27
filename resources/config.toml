@@ -1,6 +1,6 @@
 [default]
 server_port_http=8080
-data_refresh_interval=5 # seconds
+data_refresh_interval=10 # seconds
 chain_base_rpc_url="https://mainnet.base.org"
 chain_base_uniswap_v2_factory_address="0x04C9f118d21e8B767D2e50C946f0cC9F6C367300"
 chain_base_uniswap_v3_factory_address="0x04C9f118d21e8B767D2e50C946f0cC9F6C367300"

@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
+use crate::domain::entities::token_pair::TokenPair;
 
 #[derive(Debug, Serialize, Deserialize,Clone)]
 pub struct Token{
@@ -10,7 +12,10 @@ pub struct Token{
     pub decimals: String,
     pub retrieved_at: SystemTime,
     pub updated_at: SystemTime,
-    pub active: bool
+    pub pairs: HashMap<String, TokenPair>,
+    pub active_pairs: HashMap<String, TokenPair>,
+    pub swaps: i64,
+    pub high_risk: bool
 }
 
 impl Default for Token {
@@ -23,7 +28,10 @@ impl Default for Token {
             decimals: String::new(),
             retrieved_at: SystemTime::now(),
             updated_at: SystemTime::now(),
-            active: true,
+            pairs: HashMap::new(),
+            active_pairs: HashMap::new(),
+            swaps: 0,
+            high_risk: false,
         }
     }
 }
